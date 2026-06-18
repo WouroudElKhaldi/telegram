@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegram Multi-Tool | Checker & Inviter</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="glow-bg"></div>
+
+  <!-- Sleek Login Modal/Overlay (displayed when not logged in) -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-modal glass">
+      <div class="auth-header">
+        <svg viewBox="0 0 24 24" width="48" height="48" class="logo-icon">
+          <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.2-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+        </svg>
+        <h2>Connect Telegram Account</h2>
+        <p>Ensure your <code>.env</code> file has the correct API credentials.</p>
+      </div>
+
+      <div class="form-group">
+        <label for="phone-number">Your Phone Number</label>
+        <input type="tel" id="phone-number" placeholder="e.g. +1234567890">
+      </div>
+
+      <div id="login-step-code" class="form-group hidden">
+        <label for="login-code">Verification Code</label>
+        <input type="text" id="login-code" placeholder="Enter code received on Telegram">
+      </div>
+
+      <div id="login-step-2fa" class="form-group hidden">
+        <label for="password-2fa">2FA Password</label>
+        <input type="password" id="password-2fa" placeholder="Enter 2FA password (if enabled)">
+      </div>
+
+      <button id="btn-connect" class="btn btn-primary">Connect & Login</button>
+    </div>
+  </div>
+
+  <!-- Main App Container -->
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-main">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" width="28" height="28">
+            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.2-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/>
+          </svg>
+          <h1>Telegram Multi-Tool</h1>
+        </div>
+        <div class="header-actions">
+          <span id="connection-badge" class="badge disconnected">Disconnected</span>
+          <button id="btn-logout" class="btn btn-secondary btn-sm hidden">Log Out</button>
+        </div>
+      </div>
+      <p class="subtitle">Validate registrations and manage channel invites separately</p>
+    </header>
+
+    <main class="app-grid">
+      <!-- Section 1: Telegram Checker -->
+      <section class="panel glass checker-panel">
+        <div class="panel-header">
+          <h2>Telegram Presence Checker</h2>
+        </div>
+        
+        <div class="form-group">
+          <label for="check-numbers">Phone Number(s) to Check</label>
+          <textarea id="check-numbers" rows="5" placeholder="Enter phone numbers (one per line, e.g.&#10;+19876543210&#10;+447123456789)"></textarea>
+          <span class="field-hint">Paste one or multiple numbers to verify their Telegram registration.</span>
+        </div>
+
+        <button id="btn-check" class="btn btn-action-check" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+          Verify Numbers
+        </button>
+      </section>
+
+      <!-- Section 2: Channel Inviter -->
+      <section class="panel glass inviter-panel">
+        <div class="panel-header">
+          <h2>Channel Invite Manager</h2>
+        </div>
+
+        <div class="form-group">
+          <label for="invite-numbers">Phone Number(s) to Invite</label>
+          <textarea id="invite-numbers" rows="3" placeholder="Enter phone numbers (one per line)"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="channel-peer">Target Channel Username / Link / ID</label>
+          <input type="text" id="channel-peer" placeholder="e.g. @my_awesome_channel">
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="switch-container">
+            <input type="checkbox" id="chk-use-invite-link">
+            <span class="switch-slider"></span>
+            <span class="switch-label">Only generate invite link (don't directly add)</span>
+          </label>
+        </div>
+
+        <button id="btn-execute" class="btn btn-action-execute" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+          </svg>
+          Add to Channel / Get Link
+        </button>
+      </section>
+
+      <!-- Bottom Terminal Panel: Console Logs -->
+      <section class="panel glass console-panel">
+        <div class="panel-header">
+          <h2>Execution Console</h2>
+          <button id="btn-clear-console" class="btn-clear">Clear Logs</button>
+        </div>
+        <div class="console-body" id="console-log">
+          <div class="log-line system">Console initialized. Ready to execute actions.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+  
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
