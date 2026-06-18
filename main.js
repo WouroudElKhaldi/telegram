@@ -2,6 +2,8 @@ import { TelegramClient, Api } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 
 // DOM Elements
+const apiIdInput = document.getElementById('api-id');
+const apiHashInput = document.getElementById('api-hash');
 const phoneInput = document.getElementById('phone-number');
 const codeInput = document.getElementById('login-code');
 const passwordInput = document.getElementById('password-2fa');
@@ -42,9 +44,23 @@ function log(message, type = 'system') {
   consoleLog.scrollTop = consoleLog.scrollHeight;
 }
 
-// Load saved settings (Phone & Session)
+// Load saved settings (Phone, API credentials & Session)
 function loadSettings() {
+  const envApiId = import.meta.env.VITE_TG_API_ID || '';
+  const envApiHash = import.meta.env.VITE_TG_API_HASH || '';
+
+  // Hide inputs if credentials exist in .env
+  if (envApiId && envApiHash) {
+    const apiInputsDiv = document.getElementById('api-credentials-inputs');
+    if (apiInputsDiv) apiInputsDiv.classList.add('hidden');
+  }
+
+  const savedApiId = localStorage.getItem('tg_api_id') || envApiId;
+  const savedApiHash = localStorage.getItem('tg_api_hash') || envApiHash;
   const savedPhone = localStorage.getItem('tg_phone');
+
+  if (savedApiId) apiIdInput.value = savedApiId;
+  if (savedApiHash) apiHashInput.value = savedApiHash;
   if (savedPhone) phoneInput.value = savedPhone;
 
   const savedSession = localStorage.getItem('tg_session');
@@ -55,6 +71,8 @@ function loadSettings() {
 
 // Save settings to LocalStorage
 function saveSettings() {
+  localStorage.setItem('tg_api_id', apiIdInput.value.trim());
+  localStorage.setItem('tg_api_hash', apiHashInput.value.trim());
   localStorage.setItem('tg_phone', phoneInput.value.trim());
 }
 
@@ -123,14 +141,14 @@ connectBtn.addEventListener('click', async () => {
   // Otherwise, start fresh connection
   if (isConnecting) return;
   
-  // Load API keys from environment
-  const apiId = parseInt(import.meta.env.VITE_TG_API_ID, 10);
-  const apiHash = import.meta.env.VITE_TG_API_HASH;
+  // Load API keys from input
+  const apiId = parseInt(apiIdInput.value.trim(), 10);
+  const apiHash = apiHashInput.value.trim();
   const phone = phoneInput.value.trim();
 
   if (isNaN(apiId) || !apiHash || !phone) {
-    log('Error: API credentials not defined in .env or phone number is empty.', 'error');
-    alert('Please configure your VITE_TG_API_ID and VITE_TG_API_HASH in the .env file!');
+    log('Error: API credentials (API ID & API Hash) and Phone Number are required.', 'error');
+    alert('Please enter your API ID, API Hash, and Phone Number to connect!');
     return;
   }
 
