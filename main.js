@@ -318,8 +318,64 @@ executeBtn.addEventListener('click', async () => {
   log(`Resolving channel target: "${channelVal}"...`, 'info');
 
   try {
-    const channelEntity = await client.getEntity(channelVal);
-    log(`Channel resolved successfully: ID ${channelEntity.id}`, 'success');
+    let channelEntity = null;
+    let inviteHash = null;
+
+    if (channelVal.includes('t.me/+')) {
+      inviteHash = channelVal.split('t.me/+')[1].split('?')[0].trim();
+    } else if (channelVal.includes('t.me/joinchat/')) {
+      inviteHash = channelVal.split('t.me/joinchat/')[1].split('?')[0].trim();
+    }
+
+    if (inviteHash) {
+      log(`Checking invite link hash: "${inviteHash}"...`, 'info');
+      try {
+        const inviteInfo = await client.invoke(
+          new Api.messages.CheckChatInvite({
+            hash: inviteHash
+          })
+        );
+        if (inviteInfo.chat) {
+          channelEntity = inviteInfo.chat;
+        } else {
+          log(`Joining channel via invite link...`, 'info');
+          const updates = await client.invoke(
+            new Api.messages.ImportChatInvite({
+              hash: inviteHash
+            })
+          );
+          if (updates.chats && updates.chats.length > 0) {
+            channelEntity = updates.chats[0];
+          } else if (updates.chat) {
+            channelEntity = updates.chat;
+          }
+        }
+      } catch (checkErr) {
+        if (checkErr.message.includes("INVITE_HASH_EXPIRED")) {
+          throw new Error("The invite link has expired or is invalid.");
+        } else {
+          log(`Direct check failed: ${checkErr.message}. Trying to join directly...`, 'warning');
+          const updates = await client.invoke(
+            new Api.messages.ImportChatInvite({
+              hash: inviteHash
+            })
+          );
+          if (updates.chats && updates.chats.length > 0) {
+            channelEntity = updates.chats[0];
+          } else if (updates.chat) {
+            channelEntity = updates.chat;
+          }
+        }
+      }
+    } else {
+      channelEntity = await client.getEntity(channelVal);
+    }
+
+    if (!channelEntity) {
+      throw new Error("Could not resolve target channel entity.");
+    }
+
+    log(`Channel resolved successfully: ID ${channelEntity.id || channelEntity.chatId || 'unknown'}`, 'success');
 
     if (inviteOnly) {
       log('Requesting chat invite link...', 'info');
