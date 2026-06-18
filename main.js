@@ -235,6 +235,26 @@ logoutBtn.addEventListener('click', async () => {
   }
 })();
 
+// CSV download helper
+function downloadCSV(filename, headers, rows) {
+  let csvContent = "\uFEFF"; // UTF-8 BOM
+  csvContent += headers.join(",") + "\n";
+  
+  rows.forEach(row => {
+    const formatted = row.map(val => `"${String(val).replace(/"/g, '""')}"`);
+    csvContent += formatted.join(",") + "\n";
+  });
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 // 1. Check Numbers Action
 checkBtn.addEventListener('click', async () => {
   const numbers = parseNumbers(checkNumbersInput.value);
@@ -250,6 +270,8 @@ checkBtn.addEventListener('click', async () => {
 
   checkBtn.setAttribute('disabled', 'true');
   log(`Starting validation for ${numbers.length} phone number(s)...`, 'info');
+
+  const results = [];
 
   for (const targetNumber of numbers) {
     try {
@@ -271,7 +293,9 @@ checkBtn.addEventListener('click', async () => {
       
       if (result.users && result.users.length > 0) {
         const user = result.users[0];
-        log(`✅ REGISTERED: ${targetNumber} is on Telegram! (${user.firstName} ${user.lastName || ''}, @${user.username || 'NoUsername'})`, 'success');
+        const usernameStr = user.username ? `@${user.username}` : 'None';
+        log(`✅ REGISTERED: ${targetNumber} is on Telegram! (${user.firstName} ${user.lastName || ''}, ${usernameStr})`, 'success');
+        results.push([targetNumber, usernameStr, 'Yes']);
         
         // Clean up contact list so it doesn't get cluttered
         try {
@@ -283,13 +307,23 @@ checkBtn.addEventListener('click', async () => {
         }
       } else {
         log(`❌ NOT REGISTERED: ${targetNumber} is not on Telegram.`, 'error');
+        results.push([targetNumber, 'None', 'Has no']);
       }
     } catch (err) {
       log(`Error checking ${targetNumber}: ${err.message}`, 'error');
+      results.push([targetNumber, 'Error', `Error: ${err.message}`]);
     }
   }
 
-  log('Validation complete.', 'system');
+  // Sort: 'Has no' on top, then 'Yes', then others
+  results.sort((a, b) => {
+    if (a[2] === 'Has no' && b[2] !== 'Has no') return -1;
+    if (a[2] !== 'Has no' && b[2] === 'Has no') return 1;
+    return 0;
+  });
+
+  log('Validation complete. Exporting Excel (CSV)...', 'system');
+  downloadCSV(`telegram_check_results_${new Date().toISOString().slice(0,10)}.csv`, ['Phone Number', 'Username', 'Registered on Telegram'], results);
   checkBtn.removeAttribute('disabled');
 });
 
@@ -315,78 +349,13 @@ executeBtn.addEventListener('click', async () => {
   }
 
   executeBtn.setAttribute('disabled', 'true');
-  log(`Resolving channel target: "${channelVal}"...`, 'info');
+  const actionResults = [];
 
   try {
-    let channelEntity = null;
-    let inviteHash = null;
-
-    if (channelVal.includes('t.me/+')) {
-      inviteHash = channelVal.split('t.me/+')[1].split('?')[0].trim();
-    } else if (channelVal.includes('t.me/joinchat/')) {
-      inviteHash = channelVal.split('t.me/joinchat/')[1].split('?')[0].trim();
-    }
-
-    if (inviteHash) {
-      log(`Checking invite link hash: "${inviteHash}"...`, 'info');
-      try {
-        const inviteInfo = await client.invoke(
-          new Api.messages.CheckChatInvite({
-            hash: inviteHash
-          })
-        );
-        if (inviteInfo.chat) {
-          channelEntity = inviteInfo.chat;
-        } else {
-          log(`Joining channel via invite link...`, 'info');
-          const updates = await client.invoke(
-            new Api.messages.ImportChatInvite({
-              hash: inviteHash
-            })
-          );
-          if (updates.chats && updates.chats.length > 0) {
-            channelEntity = updates.chats[0];
-          } else if (updates.chat) {
-            channelEntity = updates.chat;
-          }
-        }
-      } catch (checkErr) {
-        if (checkErr.message.includes("INVITE_HASH_EXPIRED")) {
-          throw new Error("The invite link has expired or is invalid.");
-        } else {
-          log(`Direct check failed: ${checkErr.message}. Trying to join directly...`, 'warning');
-          const updates = await client.invoke(
-            new Api.messages.ImportChatInvite({
-              hash: inviteHash
-            })
-          );
-          if (updates.chats && updates.chats.length > 0) {
-            channelEntity = updates.chats[0];
-          } else if (updates.chat) {
-            channelEntity = updates.chat;
-          }
-        }
-      }
-    } else {
-      channelEntity = await client.getEntity(channelVal);
-    }
-
-    if (!channelEntity) {
-      throw new Error("Could not resolve target channel entity.");
-    }
-
-    log(`Channel resolved successfully: ID ${channelEntity.id || channelEntity.chatId || 'unknown'}`, 'success');
-
     if (inviteOnly) {
-      log('Requesting chat invite link...', 'info');
-      const inviteLinkResult = await client.invoke(
-        new Api.messages.ExportChatInvite({
-          peer: channelEntity
-        })
-      );
-      const inviteLink = inviteLinkResult.link;
-      log(`🎉 Success! Invite link generated: <a href="${inviteLink}" target="_blank" style="color: #34d399; text-decoration: underline;">${inviteLink}</a>`, 'success');
-
+      // Direct raw link constructed from user input to bypass ExportChatInvite expiration issues
+      const inviteLink = channelVal.startsWith('http') ? channelVal : `https://t.me/${channelVal.replace('@', '')}`;
+      log(`Using invite link: ${inviteLink}`, 'info');
       log(`Starting invite link messaging flow for ${numbers.length} number(s)...`, 'info');
 
       for (const targetNumber of numbers) {
@@ -409,6 +378,7 @@ executeBtn.addEventListener('click', async () => {
 
           if (!importResult.users || importResult.users.length === 0) {
             log(`❌ Fail: ${targetNumber} is not registered on Telegram.`, 'error');
+            actionResults.push([targetNumber, 'Failed: Not registered on Telegram']);
             continue;
           }
 
@@ -421,6 +391,7 @@ executeBtn.addEventListener('click', async () => {
           });
 
           log(`✉️ Message sent successfully to ${targetNumber}!`, 'success');
+          actionResults.push([targetNumber, 'Success']);
 
           // Clean up contact from contact list
           try {
@@ -431,9 +402,69 @@ executeBtn.addEventListener('click', async () => {
 
         } catch (err) {
           log(`❌ Fail to send link to ${targetNumber}: ${err.message}`, 'error');
+          actionResults.push([targetNumber, `Failed: ${err.message}`]);
         }
       }
     } else {
+      log(`Resolving channel target: "${channelVal}"...`, 'info');
+      let channelEntity = null;
+      let inviteHash = null;
+
+      if (channelVal.includes('t.me/+')) {
+        inviteHash = channelVal.split('t.me/+')[1].split('?')[0].trim();
+      } else if (channelVal.includes('t.me/joinchat/')) {
+        inviteHash = channelVal.split('t.me/joinchat/')[1].split('?')[0].trim();
+      }
+
+      if (inviteHash) {
+        log(`Checking invite link hash: "${inviteHash}"...`, 'info');
+        try {
+          const inviteInfo = await client.invoke(
+            new Api.messages.CheckChatInvite({
+              hash: inviteHash
+            })
+          );
+          if (inviteInfo.chat) {
+            channelEntity = inviteInfo.chat;
+          } else {
+            log(`Joining channel via invite link...`, 'info');
+            const updates = await client.invoke(
+              new Api.messages.ImportChatInvite({
+                hash: inviteHash
+              })
+            );
+            if (updates.chats && updates.chats.length > 0) {
+              channelEntity = updates.chats[0];
+            } else if (updates.chat) {
+              channelEntity = updates.chat;
+            }
+          }
+        } catch (checkErr) {
+          if (checkErr.message.includes("INVITE_HASH_EXPIRED")) {
+            throw new Error("The invite link has expired or is invalid.");
+          } else {
+            log(`Direct check failed: ${checkErr.message}. Trying to join directly...`, 'warning');
+            const updates = await client.invoke(
+              new Api.messages.ImportChatInvite({
+                hash: inviteHash
+              })
+            );
+            if (updates.chats && updates.chats.length > 0) {
+              channelEntity = updates.chats[0];
+            } else if (updates.chat) {
+              channelEntity = updates.chat;
+            }
+          }
+        }
+      } else {
+        channelEntity = await client.getEntity(channelVal);
+      }
+
+      if (!channelEntity) {
+        throw new Error("Could not resolve target channel entity.");
+      }
+
+      log(`Channel resolved successfully: ID ${channelEntity.id || channelEntity.chatId || 'unknown'}`, 'success');
       log(`Starting invite flow for ${numbers.length} number(s)...`, 'info');
 
       for (const targetNumber of numbers) {
@@ -456,6 +487,7 @@ executeBtn.addEventListener('click', async () => {
 
           if (!importResult.users || importResult.users.length === 0) {
             log(`❌ Fail: ${targetNumber} is not registered on Telegram.`, 'error');
+            actionResults.push([targetNumber, 'Failed: Not registered on Telegram']);
             continue;
           }
 
@@ -470,6 +502,7 @@ executeBtn.addEventListener('click', async () => {
           );
 
           log(`🎉 Success! ${targetNumber} has been added to the channel.`, 'success');
+          actionResults.push([targetNumber, 'Success']);
 
           // Clean up contact from contact list
           try {
@@ -479,15 +512,20 @@ executeBtn.addEventListener('click', async () => {
           } catch (delErr) {}
 
         } catch (err) {
+          let errorMsg = err.message;
           if (err.message.includes("USER_PRIVACY_RESTRICTED")) {
+            errorMsg = "Privacy settings prevent direct invites";
             log(`❌ Fail: ${targetNumber}'s privacy settings prevent direct invitations.`, 'error');
           } else if (err.message.includes("CHANNELS_ADMIN_PUBLIC_LEFT")) {
+            errorMsg = "No admin permissions to invite users";
             log(`❌ Fail: You do not have administrator permissions to invite users.`, 'error');
           } else if (err.message.includes("USERS_TOO_MUCH")) {
+            errorMsg = "Maximum invite limit (200) exceeded";
             log(`❌ Fail: Maximum direct invitation limit (200) exceeded.`, 'error');
           } else {
             log(`❌ Fail for ${targetNumber}: ${err.message}`, 'error');
           }
+          actionResults.push([targetNumber, `Failed: ${errorMsg}`]);
         }
       }
     }
@@ -495,6 +533,7 @@ executeBtn.addEventListener('click', async () => {
     log(`Channel Action failed: ${err.message}`, 'error');
   }
 
-  log('Action execution complete.', 'system');
+  log('Action execution complete. Exporting Excel (CSV)...', 'system');
+  downloadCSV(`telegram_invite_results_${new Date().toISOString().slice(0,10)}.csv`, ['Phone Number', 'Status'], actionResults);
   executeBtn.removeAttribute('disabled');
 });
