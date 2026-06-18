@@ -384,15 +384,63 @@ executeBtn.addEventListener('click', async () => {
           peer: channelEntity
         })
       );
-      log(`🎉 Success! Invite link generated: <a href="${inviteLinkResult.link}" target="_blank" style="color: #34d399; text-decoration: underline;">${inviteLinkResult.link}</a>`, 'success');
+      const inviteLink = inviteLinkResult.link;
+      log(`🎉 Success! Invite link generated: <a href="${inviteLink}" target="_blank" style="color: #34d399; text-decoration: underline;">${inviteLink}</a>`, 'success');
+
+      log(`Starting invite link messaging flow for ${numbers.length} number(s)...`, 'info');
+
+      for (const targetNumber of numbers) {
+        try {
+          log(`Resolving user for messaging: ${targetNumber}...`, 'info');
+          const randomClientId = BigInt(Math.floor(Math.random() * 10000000));
+
+          const importResult = await client.invoke(
+            new Api.contacts.ImportContacts({
+              contacts: [
+                new Api.InputPhoneContact({
+                  clientId: randomClientId,
+                  phone: targetNumber,
+                  firstName: "Contact",
+                  lastName: "Invite",
+                }),
+              ],
+            })
+          );
+
+          if (!importResult.users || importResult.users.length === 0) {
+            log(`❌ Fail: ${targetNumber} is not registered on Telegram.`, 'error');
+            continue;
+          }
+
+          const targetUser = importResult.users[0];
+          log(`User resolved: ${targetUser.firstName} (ID: ${targetUser.id}). Sending message...`, 'info');
+
+          // Send message with the invite link
+          await client.sendMessage(targetUser.id, {
+            message: `Hi! Here is the invite link to join our channel: ${inviteLink}`
+          });
+
+          log(`✉️ Message sent successfully to ${targetNumber}!`, 'success');
+
+          // Clean up contact from contact list
+          try {
+            await client.invoke(new Api.contacts.DeleteContacts({
+              id: [targetUser.id]
+            }));
+          } catch (delErr) {}
+
+        } catch (err) {
+          log(`❌ Fail to send link to ${targetNumber}: ${err.message}`, 'error');
+        }
+      }
     } else {
       log(`Starting invite flow for ${numbers.length} number(s)...`, 'info');
-      
+
       for (const targetNumber of numbers) {
         try {
           log(`Resolving user for: ${targetNumber}...`, 'info');
           const randomClientId = BigInt(Math.floor(Math.random() * 10000000));
-          
+
           const importResult = await client.invoke(
             new Api.contacts.ImportContacts({
               contacts: [
