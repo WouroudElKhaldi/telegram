@@ -273,6 +273,81 @@ function downloadCSV(filename, headers, rows) {
   document.body.removeChild(link);
 }
 
+// Robust helper to resolve a user by phone number
+async function resolveUserByPhone(client, targetNumber) {
+  const normalizedTarget = targetNumber.replace(/\D/g, '');
+  if (!normalizedTarget) return null;
+
+  const randomClientId = BigInt(Math.floor(Math.random() * 10000000));
+
+  // 1. Try importing the contact
+  try {
+    const importResult = await client.invoke(
+      new Api.contacts.ImportContacts({
+        contacts: [
+          new Api.InputPhoneContact({
+            clientId: randomClientId,
+            phone: targetNumber,
+            firstName: "Channel",
+            lastName: "Member",
+          }),
+        ],
+      })
+    );
+
+    // If successfully returned in users
+    if (importResult.users && importResult.users.length > 0) {
+      const found = importResult.users.find(u => u.phone && u.phone.replace(/\D/g, '') === normalizedTarget);
+      if (found) return found;
+      return importResult.users[0];
+    }
+
+    // If user ID was returned in imported list but not in users list
+    if (importResult.imported && importResult.imported.length > 0) {
+      const importedContact = importResult.imported[0];
+      try {
+        const user = await client.getEntity(importedContact.userId);
+        if (user) return user;
+      } catch (e) {
+        // Fall through
+      }
+    }
+  } catch (err) {
+    log(`Import check warning for ${targetNumber}: ${err.message}`, 'warning');
+  }
+
+  // 2. If not found (might already be in contact list), fetch contacts list
+  try {
+    const contactsResult = await client.invoke(
+      new Api.contacts.GetContacts({
+        hash: BigInt(0),
+      })
+    );
+    if (contactsResult && contactsResult.users) {
+      const found = contactsResult.users.find(u => u.phone && u.phone.replace(/\D/g, '') === normalizedTarget);
+      if (found) return found;
+    }
+  } catch (e) {
+    // Fall through
+  }
+
+  // 3. Fallback to ResolvePhone
+  try {
+    const resolved = await client.invoke(
+      new Api.contacts.ResolvePhone({
+        phone: targetNumber,
+      })
+    );
+    if (resolved && resolved.users && resolved.users.length > 0) {
+      return resolved.users[0];
+    }
+  } catch (e) {
+    // Fall through
+  }
+
+  return null;
+}
+
 // 1. Check Numbers Action
 checkBtn.addEventListener('click', async () => {
   const numbers = parseNumbers(checkNumbersInput.value);
@@ -294,25 +369,11 @@ checkBtn.addEventListener('click', async () => {
   for (const targetNumber of numbers) {
     try {
       log(`Checking: ${targetNumber}...`, 'info');
-      const randomClientId = BigInt(Math.floor(Math.random() * 10000000));
+      const user = await resolveUserByPhone(client, targetNumber);
       
-      const result = await client.invoke(
-        new Api.contacts.ImportContacts({
-          contacts: [
-            new Api.InputPhoneContact({
-              clientId: randomClientId,
-              phone: targetNumber,
-              firstName: "Check",
-              lastName: "Number",
-            }),
-          ],
-        })
-      );
-      
-      if (result.users && result.users.length > 0) {
-        const user = result.users[0];
+      if (user) {
         const usernameStr = user.username ? `@${user.username}` : 'None';
-        log(`✅ REGISTERED: ${targetNumber} is on Telegram! (${user.firstName} ${user.lastName || ''}, ${usernameStr})`, 'success');
+        log(`✅ REGISTERED: ${targetNumber} is on Telegram! (${user.firstName || ''} ${user.lastName || ''}, ${usernameStr})`, 'success');
         results.push([targetNumber, usernameStr, 'Yes']);
         
         // Clean up contact list so it doesn't get cluttered
@@ -379,29 +440,15 @@ executeBtn.addEventListener('click', async () => {
       for (const targetNumber of numbers) {
         try {
           log(`Resolving user for messaging: ${targetNumber}...`, 'info');
-          const randomClientId = BigInt(Math.floor(Math.random() * 10000000));
+          const targetUser = await resolveUserByPhone(client, targetNumber);
 
-          const importResult = await client.invoke(
-            new Api.contacts.ImportContacts({
-              contacts: [
-                new Api.InputPhoneContact({
-                  clientId: randomClientId,
-                  phone: targetNumber,
-                  firstName: "Contact",
-                  lastName: "Invite",
-                }),
-              ],
-            })
-          );
-
-          if (!importResult.users || importResult.users.length === 0) {
+          if (!targetUser) {
             log(`❌ Fail: ${targetNumber} is not registered on Telegram.`, 'error');
             actionResults.push([targetNumber, 'Failed: Not registered on Telegram']);
             continue;
           }
 
-          const targetUser = importResult.users[0];
-          log(`User resolved: ${targetUser.firstName} (ID: ${targetUser.id}). Sending message...`, 'info');
+          log(`User resolved: ${targetUser.firstName || ''} (ID: ${targetUser.id}). Sending message...`, 'info');
 
           // Send message with the invite link
           await client.sendMessage(targetUser.id, {
@@ -488,29 +535,15 @@ executeBtn.addEventListener('click', async () => {
       for (const targetNumber of numbers) {
         try {
           log(`Resolving user for: ${targetNumber}...`, 'info');
-          const randomClientId = BigInt(Math.floor(Math.random() * 10000000));
+          const targetUser = await resolveUserByPhone(client, targetNumber);
 
-          const importResult = await client.invoke(
-            new Api.contacts.ImportContacts({
-              contacts: [
-                new Api.InputPhoneContact({
-                  clientId: randomClientId,
-                  phone: targetNumber,
-                  firstName: "Channel",
-                  lastName: "Member",
-                }),
-              ],
-            })
-          );
-
-          if (!importResult.users || importResult.users.length === 0) {
+          if (!targetUser) {
             log(`❌ Fail: ${targetNumber} is not registered on Telegram.`, 'error');
             actionResults.push([targetNumber, 'Failed: Not registered on Telegram']);
             continue;
           }
 
-          const targetUser = importResult.users[0];
-          log(`User resolved: ${targetUser.firstName} (ID: ${targetUser.id}). Inviting...`, 'info');
+          log(`User resolved: ${targetUser.firstName || ''} (ID: ${targetUser.id}). Inviting...`, 'info');
 
           await client.invoke(
             new Api.channels.InviteToChannel({
