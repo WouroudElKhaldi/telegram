@@ -52,18 +52,9 @@ function log(message, type = 'system') {
 
 // Load saved settings (Phone, API credentials & Session)
 function loadSettings() {
-  const envApiId = import.meta.env.VITE_TG_API_ID || '';
-  const envApiHash = import.meta.env.VITE_TG_API_HASH || '';
-
-  // Hide inputs if credentials exist in .env
-  if (envApiId && envApiHash) {
-    const apiInputsDiv = document.getElementById('api-credentials-inputs');
-    if (apiInputsDiv) apiInputsDiv.classList.add('hidden');
-  }
-
-  const savedApiId = localStorage.getItem('tg_api_id') || envApiId;
-  const savedApiHash = localStorage.getItem('tg_api_hash') || envApiHash;
-  const savedPhone = localStorage.getItem('tg_phone');
+  const savedApiId = localStorage.getItem('tg_api_id') || '';
+  const savedApiHash = localStorage.getItem('tg_api_hash') || '';
+  const savedPhone = localStorage.getItem('tg_phone') || '';
 
   if (savedApiId) apiIdInput.value = savedApiId;
   if (savedApiHash) apiHashInput.value = savedApiHash;
@@ -239,8 +230,8 @@ logoutBtn.addEventListener('click', async () => {
 // Auto login if session already exists
 (async () => {
   const sessionString = localStorage.getItem('tg_session');
-  const apiId = parseInt(import.meta.env.VITE_TG_API_ID, 10);
-  const apiHash = import.meta.env.VITE_TG_API_HASH;
+  const apiId = parseInt(localStorage.getItem('tg_api_id'), 10);
+  const apiHash = localStorage.getItem('tg_api_hash');
   
   if (sessionString && !isNaN(apiId) && apiHash) {
     try {
