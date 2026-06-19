@@ -375,15 +375,6 @@ checkBtn.addEventListener('click', async () => {
         const usernameStr = user.username ? `@${user.username}` : 'None';
         log(`✅ REGISTERED: ${targetNumber} is on Telegram! (${user.firstName || ''} ${user.lastName || ''}, ${usernameStr})`, 'success');
         results.push([targetNumber, usernameStr, 'Yes']);
-        
-        // Clean up contact list so it doesn't get cluttered
-        try {
-          await client.invoke(new Api.contacts.DeleteContacts({
-            id: [user.id]
-          }));
-        } catch (delErr) {
-          // Silent catch for deletion error
-        }
       } else {
         log(`❌ NOT REGISTERED: ${targetNumber} is not on Telegram.`, 'error');
         results.push([targetNumber, 'None', 'Has no']);
