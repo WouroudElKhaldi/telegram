@@ -13,11 +13,13 @@ const connectionBadge = document.getElementById('connection-badge');
 const authOverlay = document.getElementById('auth-overlay');
 
 const checkNumbersInput = document.getElementById('check-numbers');
+const checkUsernamesInput = document.getElementById('check-usernames');
 const inviteNumbersInput = document.getElementById('invite-numbers');
 const channelInput = document.getElementById('channel-peer');
 const inviteLinkCheck = document.getElementById('chk-use-invite-link');
 
 const checkBtn = document.getElementById('btn-check');
+const checkUsernamesBtn = document.getElementById('btn-check-usernames');
 const executeBtn = document.getElementById('btn-execute');
 const consoleLog = document.getElementById('console-log');
 const clearConsoleBtn = document.getElementById('btn-clear-console');
@@ -90,6 +92,7 @@ function resetAuthUI() {
 function updateActionButtons(connected) {
   if (connected) {
     checkBtn.removeAttribute('disabled');
+    checkUsernamesBtn.removeAttribute('disabled');
     executeBtn.removeAttribute('disabled');
     connectionBadge.textContent = 'Connected';
     connectionBadge.className = 'badge connected';
@@ -97,6 +100,7 @@ function updateActionButtons(connected) {
     authOverlay.classList.add('hidden');
   } else {
     checkBtn.setAttribute('disabled', 'true');
+    checkUsernamesBtn.setAttribute('disabled', 'true');
     executeBtn.setAttribute('disabled', 'true');
     connectionBadge.textContent = 'Disconnected';
     connectionBadge.className = 'badge disconnected';
@@ -405,6 +409,60 @@ checkBtn.addEventListener('click', async () => {
   log('Validation complete. Exporting Excel (CSV)...', 'system');
   downloadCSV(`telegram_check_results_${new Date().toISOString().slice(0,10)}.csv`, ['Phone Number', 'Username', 'Registered on Telegram'], results);
   checkBtn.removeAttribute('disabled');
+});
+
+// 1.5 Check Usernames Action
+checkUsernamesBtn.addEventListener('click', async () => {
+  const usernames = parseNumbers(checkUsernamesInput.value);
+  if (usernames.length === 0) {
+    log('Please enter at least one username to check.', 'warning');
+    return;
+  }
+
+  if (!client || !client.connected) {
+    log('Error: Client is not connected.', 'error');
+    return;
+  }
+
+  checkUsernamesBtn.setAttribute('disabled', 'true');
+  log(`Starting validation for ${usernames.length} username(s)...`, 'info');
+
+  const results = [];
+
+  for (let username of usernames) {
+    try {
+      username = username.trim();
+      if (!username.startsWith('@')) {
+        username = `@${username}`;
+      }
+      log(`Checking username: ${username}...`, 'info');
+      
+      const entity = await client.getEntity(username);
+      if (entity && (entity.className === 'User' || entity.className === 'Chat' || entity.className === 'Channel')) {
+        const typeStr = entity.className;
+        let nameStr = entity.firstName || entity.title || 'None';
+        if (entity.lastName) nameStr += ` ${entity.lastName}`;
+        
+        log(`✅ FOUND: ${username} exists! (Type: ${typeStr}, Name: ${nameStr})`, 'success');
+        results.push([username, typeStr, nameStr, 'Yes']);
+      } else {
+        log(`❌ NOT FOUND: ${username} does not exist.`, 'error');
+        results.push([username, 'Unknown', 'None', 'No']);
+      }
+    } catch (err) {
+      if (err.message.includes("Could not find") || err.message.includes("Cannot find") || err.message.includes("ValueError")) {
+        log(`❌ NOT FOUND: ${username} does not exist.`, 'error');
+        results.push([username, 'None', 'None', 'No']);
+      } else {
+        log(`Error checking username ${username}: ${err.message}`, 'error');
+        results.push([username, 'Error', `Error: ${err.message}`, 'Error']);
+      }
+    }
+  }
+
+  log('Validation complete. Exporting Excel (CSV)...', 'system');
+  downloadCSV(`telegram_username_results_${new Date().toISOString().slice(0,10)}.csv`, ['Username', 'Type', 'Name', 'Exists'], results);
+  checkUsernamesBtn.removeAttribute('disabled');
 });
 
 // 2. Add / Get Invite Action

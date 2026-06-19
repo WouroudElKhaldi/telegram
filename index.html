@@ -91,6 +91,21 @@
           </svg>
           Verify Numbers
         </button>
+
+        <div class="divider" style="margin: 20px 0; border-top: 1px dashed rgba(255,255,255,0.15);"></div>
+
+        <div class="form-group">
+          <label for="check-usernames">Username(s) to Check</label>
+          <textarea id="check-usernames" rows="5" placeholder="Enter usernames (one per line, e.g.&#10;@john_doe&#10;@jane_smith)"></textarea>
+          <span class="field-hint">Paste one or multiple usernames (with or without @) to verify if they exist on Telegram.</span>
+        </div>
+
+        <button id="btn-check-usernames" class="btn btn-action-check" disabled>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+          Verify Usernames
+        </button>
       </section>
 
       <!-- Section 2: Channel Inviter -->
