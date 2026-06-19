@@ -443,25 +443,27 @@ checkUsernamesBtn.addEventListener('click', async () => {
         let nameStr = entity.firstName || entity.title || 'None';
         if (entity.lastName) nameStr += ` ${entity.lastName}`;
         
-        log(`✅ FOUND: ${username} exists! (Type: ${typeStr}, Name: ${nameStr})`, 'success');
-        results.push([username, typeStr, nameStr, 'Yes']);
+        const phoneStr = entity.phone ? `+${entity.phone}` : 'Hidden';
+        
+        log(`✅ FOUND: ${username} exists! (Type: ${typeStr}, Name: ${nameStr}, Phone: ${phoneStr})`, 'success');
+        results.push([username, typeStr, nameStr, phoneStr, 'Yes']);
       } else {
         log(`❌ NOT FOUND: ${username} does not exist.`, 'error');
-        results.push([username, 'Unknown', 'None', 'No']);
+        results.push([username, 'Unknown', 'None', 'None', 'No']);
       }
     } catch (err) {
       if (err.message.includes("Could not find") || err.message.includes("Cannot find") || err.message.includes("ValueError")) {
         log(`❌ NOT FOUND: ${username} does not exist.`, 'error');
-        results.push([username, 'None', 'None', 'No']);
+        results.push([username, 'None', 'None', 'None', 'No']);
       } else {
         log(`Error checking username ${username}: ${err.message}`, 'error');
-        results.push([username, 'Error', `Error: ${err.message}`, 'Error']);
+        results.push([username, 'Error', `Error: ${err.message}`, 'None', 'Error']);
       }
     }
   }
 
   log('Validation complete. Exporting Excel (CSV)...', 'system');
-  downloadCSV(`telegram_username_results_${new Date().toISOString().slice(0,10)}.csv`, ['Username', 'Type', 'Name', 'Exists'], results);
+  downloadCSV(`telegram_username_results_${new Date().toISOString().slice(0,10)}.csv`, ['Username', 'Type', 'Name', 'Phone Number', 'Exists'], results);
   checkUsernamesBtn.removeAttribute('disabled');
 });
 
