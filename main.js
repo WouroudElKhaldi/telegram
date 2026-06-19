@@ -15,12 +15,16 @@ const authOverlay = document.getElementById('auth-overlay');
 const checkNumbersInput = document.getElementById('check-numbers');
 const checkUsernamesInput = document.getElementById('check-usernames');
 const inviteNumbersInput = document.getElementById('invite-numbers');
+const inviteUsernamesInput = document.getElementById('invite-usernames');
 const channelInput = document.getElementById('channel-peer');
+const channelUsernameInput = document.getElementById('channel-peer-username');
 const inviteLinkCheck = document.getElementById('chk-use-invite-link');
+const inviteLinkCheckUsername = document.getElementById('chk-use-invite-link-username');
 
 const checkBtn = document.getElementById('btn-check');
 const checkUsernamesBtn = document.getElementById('btn-check-usernames');
 const executeBtn = document.getElementById('btn-execute');
+const executeUsernameBtn = document.getElementById('btn-execute-username');
 const consoleLog = document.getElementById('console-log');
 const clearConsoleBtn = document.getElementById('btn-clear-console');
 
@@ -94,6 +98,7 @@ function updateActionButtons(connected) {
     checkBtn.removeAttribute('disabled');
     checkUsernamesBtn.removeAttribute('disabled');
     executeBtn.removeAttribute('disabled');
+    executeUsernameBtn.removeAttribute('disabled');
     connectionBadge.textContent = 'Connected';
     connectionBadge.className = 'badge connected';
     logoutBtn.classList.remove('hidden');
@@ -102,6 +107,7 @@ function updateActionButtons(connected) {
     checkBtn.setAttribute('disabled', 'true');
     checkUsernamesBtn.setAttribute('disabled', 'true');
     executeBtn.setAttribute('disabled', 'true');
+    executeUsernameBtn.setAttribute('disabled', 'true');
     connectionBadge.textContent = 'Disconnected';
     connectionBadge.className = 'badge disconnected';
     logoutBtn.classList.add('hidden');
@@ -648,4 +654,163 @@ executeBtn.addEventListener('click', async () => {
   log('Action execution complete. Exporting Excel (CSV)...', 'system');
   downloadCSV(`telegram_invite_results_${new Date().toISOString().slice(0,10)}.csv`, ['Phone Number', 'Status'], actionResults);
   executeBtn.removeAttribute('disabled');
+});
+
+// 3. Add / Get Invite Action (by Username)
+executeUsernameBtn.addEventListener('click', async () => {
+  const usernames = parseNumbers(inviteUsernamesInput.value);
+  const channelVal = channelUsernameInput.value.trim();
+  const inviteOnly = inviteLinkCheckUsername.checked;
+
+  if (usernames.length === 0) {
+    log('Please enter at least one username to invite.', 'warning');
+    return;
+  }
+
+  if (!channelVal) {
+    log('Please specify a target Channel Username, Link, or ID.', 'warning');
+    return;
+  }
+
+  if (!client || !client.connected) {
+    log('Error: Client is not connected.', 'error');
+    return;
+  }
+
+  executeUsernameBtn.setAttribute('disabled', 'true');
+  const actionResults = [];
+
+  try {
+    let channelEntity = null;
+    let inviteHash = null;
+
+    if (!inviteOnly) {
+      log(`Resolving channel target: "${channelVal}"...`, 'info');
+      if (channelVal.includes('t.me/+')) {
+        inviteHash = channelVal.split('t.me/+')[1].split('?')[0].trim();
+      } else if (channelVal.includes('t.me/joinchat/')) {
+        inviteHash = channelVal.split('t.me/joinchat/')[1].split('?')[0].trim();
+      }
+
+      if (inviteHash) {
+        log(`Checking invite link hash: "${inviteHash}"...`, 'info');
+        try {
+          const inviteInfo = await client.invoke(
+            new Api.messages.CheckChatInvite({
+              hash: inviteHash
+            })
+          );
+          if (inviteInfo.chat) {
+            channelEntity = inviteInfo.chat;
+          } else {
+            log(`Joining channel via invite link...`, 'info');
+            const updates = await client.invoke(
+              new Api.messages.ImportChatInvite({
+                hash: inviteHash
+              })
+            );
+            if (updates.chats && updates.chats.length > 0) {
+              channelEntity = updates.chats[0];
+            } else if (updates.chat) {
+              channelEntity = updates.chat;
+            }
+          }
+        } catch (checkErr) {
+          if (checkErr.message.includes("INVITE_HASH_EXPIRED")) {
+            throw new Error("The invite link has expired or is invalid.");
+          } else {
+            log(`Direct check failed: ${checkErr.message}. Trying to join directly...`, 'warning');
+            const updates = await client.invoke(
+              new Api.messages.ImportChatInvite({
+                hash: inviteHash
+              })
+            );
+            if (updates.chats && updates.chats.length > 0) {
+              channelEntity = updates.chats[0];
+            } else if (updates.chat) {
+              channelEntity = updates.chat;
+            }
+          }
+        }
+      } else {
+        channelEntity = await client.getEntity(channelVal);
+      }
+
+      if (!channelEntity) {
+        throw new Error("Could not resolve target channel entity.");
+      }
+      log(`Channel resolved successfully: ID ${channelEntity.id || channelEntity.chatId || 'unknown'}`, 'success');
+    }
+
+    const inviteLink = channelVal.startsWith('http') ? channelVal : `https://t.me/${channelVal.replace('@', '')}`;
+
+    if (inviteOnly) {
+      log(`Using invite link: ${inviteLink}`, 'info');
+      log(`Starting invite link messaging flow for ${usernames.length} username(s)...`, 'info');
+    } else {
+      log(`Starting direct invite flow for ${usernames.length} username(s)...`, 'info');
+    }
+
+    for (let username of usernames) {
+      try {
+        username = username.trim();
+        if (!username.startsWith('@')) {
+          username = `@${username}`;
+        }
+        log(`Resolving user: ${username}...`, 'info');
+
+        const targetUser = await client.getEntity(username);
+
+        if (!targetUser) {
+          log(`❌ Fail: ${username} does not exist on Telegram.`, 'error');
+          actionResults.push([username, 'Failed: Not registered on Telegram']);
+          continue;
+        }
+
+        if (inviteOnly) {
+          log(`User resolved: ${targetUser.firstName || ''} (ID: ${targetUser.id}). Sending message...`, 'info');
+          await client.sendMessage(targetUser.id, {
+            message: `Hi! Here is the invite link to join our channel: ${inviteLink}`
+          });
+          log(`✉️ Message sent successfully to ${username}!`, 'success');
+          actionResults.push([username, 'Success']);
+        } else {
+          log(`User resolved: ${targetUser.firstName || ''} (ID: ${targetUser.id}). Inviting...`, 'info');
+          await client.invoke(
+            new Api.channels.InviteToChannel({
+              channel: channelEntity,
+              users: [targetUser],
+            })
+          );
+          log(`🎉 Success! ${username} has been added to the channel.`, 'success');
+          actionResults.push([username, 'Success']);
+        }
+
+      } catch (err) {
+        let errorMsg = err.message;
+        if (err.message.includes("USER_PRIVACY_RESTRICTED")) {
+          errorMsg = "Privacy settings prevent direct invites";
+          log(`❌ Fail: ${username}'s privacy settings prevent direct invitations.`, 'error');
+        } else if (err.message.includes("CHANNELS_ADMIN_PUBLIC_LEFT")) {
+          errorMsg = "No admin permissions to invite users";
+          log(`❌ Fail: You do not have administrator permissions to invite users.`, 'error');
+        } else if (err.message.includes("USERS_TOO_MUCH")) {
+          errorMsg = "Maximum invite limit (200) exceeded";
+          log(`❌ Fail: Maximum direct invitation limit (200) exceeded.`, 'error');
+        } else if (err.message.includes("Could not find") || err.message.includes("ValueError") || err.message.includes("Cannot find")) {
+          errorMsg = "Username does not exist";
+          log(`❌ Fail: Username ${username} does not exist.`, 'error');
+        } else {
+          log(`❌ Fail for ${username}: ${err.message}`, 'error');
+        }
+        actionResults.push([username, `Failed: ${errorMsg}`]);
+      }
+    }
+  } catch (err) {
+    log(`Channel Action failed: ${err.message}`, 'error');
+  }
+
+  log('Action execution complete. Exporting Excel (CSV)...', 'system');
+  downloadCSV(`telegram_invite_username_results_${new Date().toISOString().slice(0,10)}.csv`, ['Username', 'Status'], actionResults);
+  executeUsernameBtn.removeAttribute('disabled');
 });
