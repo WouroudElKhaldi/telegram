@@ -299,17 +299,27 @@ async function resolveUserByPhone(client, targetNumber) {
     if (importResult.users && importResult.users.length > 0) {
       const found = importResult.users.find(u => u.phone && u.phone.replace(/\D/g, '') === normalizedTarget);
       if (found) return found;
-      return importResult.users[0];
+
+      // Match via imported clientId mapping to userId
+      if (importResult.imported && importResult.imported.length > 0) {
+        const importedMatch = importResult.imported.find(i => i.clientId === randomClientId);
+        if (importedMatch) {
+          const userMatch = importResult.users.find(u => String(u.id) === String(importedMatch.userId));
+          if (userMatch) return userMatch;
+        }
+      }
     }
 
     // If user ID was returned in imported list but not in users list
     if (importResult.imported && importResult.imported.length > 0) {
-      const importedContact = importResult.imported[0];
-      try {
-        const user = await client.getEntity(importedContact.userId);
-        if (user) return user;
-      } catch (e) {
-        // Fall through
+      const importedMatch = importResult.imported.find(i => i.clientId === randomClientId);
+      if (importedMatch) {
+        try {
+          const user = await client.getEntity(importedMatch.userId);
+          if (user) return user;
+        } catch (e) {
+          // Fall through
+        }
       }
     }
   } catch (err) {
